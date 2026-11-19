@@ -74,14 +74,14 @@ class FrigateCutoutsCard extends HTMLElement {
         :host { display: block; font-family: inherit; }
         .row {
           display: flex;
-          gap: 14px;
+          gap: 6px;
           overflow-x: auto;
-          padding: 12px 6px 10px;
+          padding: 12px 4px 10px;
           scrollbar-width: none;
         }
         .row::-webkit-scrollbar { display: none; }
         .item {
-          flex: 0 0 104px;
+          flex: 0 0 98px;
           background: transparent;
           border: none;
           padding: 0;
@@ -96,7 +96,7 @@ class FrigateCutoutsCard extends HTMLElement {
         ${tiltCss}
         .img-box {
           width: 96px;
-          height: 106px;
+          height: 130px;
           display: flex;
           align-items: flex-end;
           justify-content: center;

@@ -407,13 +407,16 @@ class FrigateCutoutsCard extends HTMLElement {
         instance_id: this.config.instance_id,
         labels: ['person'],
         has_snapshot: true,
+        after: Math.floor(Date.now() / 1000) - 14 * 86400,
         limit: 40,
       });
-      const events = Array.isArray(res) ? res : (res?.events || []);
-      const deduped = this.dedupeEvents(events);
+      const parsed = typeof res === 'string' ? JSON.parse(res) : res;
+      const rawEvents = Array.isArray(parsed) ? parsed : (parsed?.events || parsed?.results || []);
+      const events = typeof rawEvents === 'string' ? JSON.parse(rawEvents) : rawEvents;
+      const deduped = this.dedupeEvents(Array.isArray(events) ? events : []);
 
       if (!deduped.length) {
-        row.innerHTML = '<div class="status">No recent person detections.</div>';
+        row.innerHTML = `<div class="status">No recent person detections (fetched ${Array.isArray(events) ? events.length : 0} events).</div>`;
         return;
       }
 

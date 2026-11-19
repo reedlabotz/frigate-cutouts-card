@@ -1,6 +1,7 @@
 const DEFAULT_CONFIG = {
   instance_id: 'frigate',
   cameras: '',
+  zones: '',
   limit: 10,
   dedupe_minutes: 5,
   threshold: 0.55,
@@ -226,11 +227,16 @@ class FrigateCutoutsCard extends HTMLElement {
     const windowSec = Math.max(0, Number(this.config.dedupe_minutes) || 0) * 60;
     const limit = Math.max(1, Number(this.config.limit) || 10);
     const camFilter = (this.config.cameras || '').split(',').map(s => s.trim()).filter(Boolean);
+    const zoneFilter = (this.config.zones || '').split(',').map(s => s.trim()).filter(Boolean);
     const kept = [];
 
     for (const ev of events) {
       const cam = ev.camera || 'default';
       if (camFilter.length && !camFilter.includes(cam)) continue;
+      if (zoneFilter.length) {
+        const evZones = Array.isArray(ev.zones) ? ev.zones : [];
+        if (!evZones.some(z => zoneFilter.includes(z))) continue;
+      }
       const labels = this.parseLabels(ev.sub_label);
       const ts = ev.start_time || 0;
 
@@ -429,14 +435,17 @@ class FrigateCutoutsCard extends HTMLElement {
 
     const row = this.shadowRoot.getElementById('row');
     try {
-      const res = await this._hass.callWS({
+      const zoneFilter = (this.config.zones || '').split(',').map(s => s.trim()).filter(Boolean);
+      const wsPayload = {
         type: 'frigate/events/get',
         instance_id: this.config.instance_id,
         labels: ['person'],
         has_snapshot: true,
         after: Math.floor(Date.now() / 1000) - 14 * 86400,
         limit: 40,
-      });
+      };
+      if (zoneFilter.length) wsPayload.zones = zoneFilter;
+      const res = await this._hass.callWS(wsPayload);
       const parsed = typeof res === 'string' ? JSON.parse(res) : res;
       const rawEvents = Array.isArray(parsed) ? parsed : (parsed?.events || parsed?.results || []);
       const events = typeof rawEvents === 'string' ? JSON.parse(rawEvents) : rawEvents;
@@ -529,9 +538,14 @@ class FrigateCutoutsCardEditor extends HTMLElement {
         <label>Frigate Integration Instance ID
           <input type="text" data-key="instance_id" value="${c.instance_id}" />
         </label>
-        <label>Camera Filter (comma-separated, blank = all)
-          <input type="text" data-key="cameras" value="${c.cameras}" placeholder="front_door" />
-        </label>
+        <div class="row">
+          <label>Camera Filter (blank = all)
+            <input type="text" data-key="cameras" value="${c.cameras}" placeholder="front_door" />
+          </label>
+          <label>Zone Filter (blank = all)
+            <input type="text" data-key="zones" value="${c.zones}" placeholder="porch,driveway" />
+          </label>
+        </div>
         <div class="row">
           <label>Max Stickers
             <input type="number" data-key="limit" min="1" max="20" value="${c.limit}" />

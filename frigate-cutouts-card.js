@@ -303,50 +303,71 @@ class FrigateCutoutsCard extends HTMLElement {
     const contrast = Number(this.config.contrast) || 1.18;
 
     const bmp = await createImageBitmap(blob);
-    const scale = Math.min(1, 240 / Math.max(bmp.width, bmp.height));
-    const w = Math.max(1, Math.round(bmp.width * scale));
-    const h = Math.max(1, Math.round(bmp.height * scale));
+    // Render output at up to 480px for crisp Retina/3x mobile display, while segmenting at 256px for speed
+    const outScale = Math.min(1, 480 / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * outScale));
+    const h = Math.max(1, Math.round(bmp.height * outScale));
+
+    const segScale = Math.min(1, 256 / Math.max(bmp.width, bmp.height));
+    const sw = Math.max(1, Math.round(bmp.width * segScale));
+    const sh = Math.max(1, Math.round(bmp.height * segScale));
 
     const raw = document.createElement('canvas');
-    raw.width = w; raw.height = h;
+    raw.width = sw; raw.height = sh;
     const rctx = raw.getContext('2d');
-    rctx.drawImage(bmp, 0, 0, w, h);
-    const brightness = this.computeAdaptiveBrightness(rctx, w, h, targetLum);
+    rctx.drawImage(bmp, 0, 0, sw, sh);
+    const brightness = this.computeAdaptiveBrightness(rctx, sw, sh, targetLum);
 
-    const src = document.createElement('canvas');
-    src.width = w; src.height = h;
-    const sctx = src.getContext('2d');
-    sctx.filter = `brightness(${brightness.toFixed(2)}) contrast(${contrast}) saturate(1.06)`;
-    sctx.drawImage(bmp, 0, 0, w, h);
-    sctx.filter = 'none';
+    const segCanvas = document.createElement('canvas');
+    segCanvas.width = sw; segCanvas.height = sh;
+    const segCtx = segCanvas.getContext('2d');
+    segCtx.filter = `brightness(${brightness.toFixed(2)}) contrast(${contrast}) saturate(1.06)`;
+    segCtx.drawImage(bmp, 0, 0, sw, sh);
+    segCtx.filter = 'none';
 
-    const res = segmenter.segment(src);
+    const res = segmenter.segment(segCanvas);
     const mask = res.confidenceMasks[0].getAsFloat32Array();
-    const imgData = sctx.getImageData(0, 0, w, h);
-    const d = imgData.data;
+
+    // Build smooth alpha mask at seg resolution
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = sw; maskCanvas.height = sh;
+    const mctx = maskCanvas.getContext('2d');
+    const maskImg = mctx.createImageData(sw, sh);
+    const md = maskImg.data;
 
     const low = Math.max(0.05, threshold - 0.2);
     let fgCount = 0;
     for (let i = 0; i < mask.length; i++) {
       const c = mask[i];
       const alpha = c >= threshold ? 255 : c > low ? Math.round(((c - low) / (threshold - low)) * 255) : 0;
-      d[i * 4 + 3] = alpha;
+      md[i * 4 + 3] = alpha;
       if (alpha > 128) fgCount++;
     }
+    mctx.putImageData(maskImg, 0, 0);
+
+    // Draw high-res brightened person crop
+    const src = document.createElement('canvas');
+    src.width = w; src.height = h;
+    const sctx = src.getContext('2d');
+    sctx.imageSmoothingEnabled = true;
+    sctx.imageSmoothingQuality = 'high';
+    sctx.filter = `brightness(${brightness.toFixed(2)}) contrast(${contrast}) saturate(1.06)`;
+    sctx.drawImage(bmp, 0, 0, w, h);
+    sctx.filter = 'none';
 
     if (fgCount / mask.length < 0.03) {
-      const b = Math.min(outlinePx, 6);
+      const b = Math.min(outlinePx, 8);
       const fb = document.createElement('canvas');
       fb.width = w + b * 2;
       fb.height = h + b * 2;
       const fctx = fb.getContext('2d');
       fctx.fillStyle = '#FFFFFF';
       fctx.beginPath();
-      fctx.roundRect(0, 0, fb.width, fb.height, 14);
+      fctx.roundRect(0, 0, fb.width, fb.height, 20);
       fctx.fill();
       fctx.save();
       fctx.beginPath();
-      fctx.roundRect(b, b, w, h, 10);
+      fctx.roundRect(b, b, w, h, 14);
       fctx.clip();
       fctx.drawImage(src, 0, 0, w, h, b, b, w, h);
       fctx.restore();
@@ -355,7 +376,13 @@ class FrigateCutoutsCard extends HTMLElement {
 
     const person = document.createElement('canvas');
     person.width = w; person.height = h;
-    person.getContext('2d').putImageData(imgData, 0, 0);
+    const pctx = person.getContext('2d');
+    pctx.imageSmoothingEnabled = true;
+    pctx.imageSmoothingQuality = 'high';
+    pctx.drawImage(src, 0, 0, w, h);
+    pctx.globalCompositeOperation = 'destination-in';
+    pctx.drawImage(maskCanvas, 0, 0, w, h);
+    pctx.globalCompositeOperation = 'source-over';
 
     const pad = outlinePx + 2;
     const out = document.createElement('canvas');
@@ -424,7 +451,7 @@ class FrigateCutoutsCard extends HTMLElement {
       let segmenter = null;
       try { segmenter = await getSharedSegmenter(); } catch (_) {}
 
-      const cacheSuffix = `v2:${this.config.threshold}:${this.config.outline_px}:${this.config.target_luminance}:${this.config.contrast}`;
+      const cacheSuffix = `v3:${this.config.threshold}:${this.config.outline_px}:${this.config.target_luminance}:${this.config.contrast}`;
       row.innerHTML = '';
 
       for (const { ev, labels } of deduped) {

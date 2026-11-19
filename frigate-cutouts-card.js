@@ -389,7 +389,7 @@ class FrigateCutoutsCard extends HTMLElement {
     imgEl.removeAttribute('src');
     modal.classList.add('open');
     try {
-      const resp = await this._hass.fetchWithAuth(`/api/frigate/notifications/${ev.id}/snapshot.jpg`);
+      const resp = await this._hass.fetchWithAuth(`/api/frigate/notifications/${ev.id}/snapshot.jpg?bbox=0`);
       const blob = await resp.blob();
       imgEl.src = URL.createObjectURL(blob);
     } catch (_) {}
@@ -424,7 +424,7 @@ class FrigateCutoutsCard extends HTMLElement {
       let segmenter = null;
       try { segmenter = await getSharedSegmenter(); } catch (_) {}
 
-      const cacheSuffix = `${this.config.threshold}:${this.config.outline_px}:${this.config.target_luminance}:${this.config.contrast}`;
+      const cacheSuffix = `v2:${this.config.threshold}:${this.config.outline_px}:${this.config.target_luminance}:${this.config.contrast}`;
       row.innerHTML = '';
 
       for (const { ev, labels } of deduped) {
@@ -450,7 +450,7 @@ class FrigateCutoutsCard extends HTMLElement {
         let src = db ? await this.getCached(db, cacheKey) : null;
         if (!src) {
           try {
-            const resp = await this._hass.fetchWithAuth(`/api/frigate/notifications/${ev.id}/snapshot.jpg?crop=1`);
+            const resp = await this._hass.fetchWithAuth(`/api/frigate/notifications/${ev.id}/snapshot.jpg?crop=1&bbox=0`);
             const blob = await resp.blob();
             if (segmenter) {
               src = await this.makeSticker(blob, segmenter);

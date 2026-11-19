@@ -76,7 +76,7 @@ class FrigateCutoutsCard extends HTMLElement {
           display: flex;
           gap: 6px;
           overflow-x: auto;
-          padding: 12px 4px 10px;
+          padding: 12px 12px 10px;
           scrollbar-width: none;
         }
         .row::-webkit-scrollbar { display: none; }
@@ -103,8 +103,10 @@ class FrigateCutoutsCard extends HTMLElement {
           overflow: visible;
         }
         .img-box img {
-          max-width: 100%;
+          max-width: 118px;
           max-height: 100%;
+          width: auto;
+          height: auto;
           object-fit: contain;
           filter: drop-shadow(0 5px 10px rgba(38,38,31,0.22)) drop-shadow(0 1px 2px rgba(38,38,31,0.12));
         }
@@ -410,6 +412,34 @@ class FrigateCutoutsCard extends HTMLElement {
       }
     }
     octx.drawImage(person, pad, pad);
+
+    const ow = out.width;
+    const oh = out.height;
+    const pixels = octx.getImageData(0, 0, ow, oh).data;
+    let minX = ow, minY = oh, maxX = -1, maxY = -1;
+    for (let y = 0; y < oh; y++) {
+      const rowOff = y * ow * 4;
+      for (let x = 0; x < ow; x++) {
+        if (pixels[rowOff + x * 4 + 3] > 8) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX >= minX && maxY >= minY) {
+      const m = 2;
+      const sx = Math.max(0, minX - m);
+      const sy = Math.max(0, minY - m);
+      const sw2 = Math.min(ow - sx, maxX - minX + 1 + m * 2);
+      const sh2 = Math.min(oh - sy, maxY - minY + 1 + m * 2);
+      const trimmed = document.createElement('canvas');
+      trimmed.width = sw2;
+      trimmed.height = sh2;
+      trimmed.getContext('2d').drawImage(out, sx, sy, sw2, sh2, 0, 0, sw2, sh2);
+      return trimmed.toDataURL('image/png');
+    }
     return out.toDataURL('image/png');
   }
 
@@ -460,7 +490,7 @@ class FrigateCutoutsCard extends HTMLElement {
       let segmenter = null;
       try { segmenter = await getSharedSegmenter(); } catch (_) {}
 
-      const cacheSuffix = `v3:${this.config.threshold}:${this.config.outline_px}:${this.config.target_luminance}:${this.config.contrast}`;
+      const cacheSuffix = `v4:${this.config.threshold}:${this.config.outline_px}:${this.config.target_luminance}:${this.config.contrast}`;
       row.innerHTML = '';
 
       for (const { ev, labels } of deduped) {

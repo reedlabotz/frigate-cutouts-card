@@ -10,6 +10,7 @@ const DEFAULT_CONFIG = {
   contrast: 1.18,
   tilt: true,
   unknown_label: 'Visitor',
+  label_confidence_threshold: 0.8,
 };
 
 const MEDIAPIPE_BUNDLE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
@@ -245,14 +246,38 @@ class FrigateCutoutsCard extends HTMLElement {
     modal.onclick = (e) => { if (e.target === modal) modal.classList.remove('open'); };
   }
 
-  parseLabels(sub) {
+  parseLabelEntries(ev) {
+    const sub = ev?.sub_label;
     if (!sub) return [];
-    if (typeof sub === 'string') return sub.split(',').map(s => s.trim()).filter(Boolean);
+    const fallbackScore = typeof ev?.data?.sub_label_score === 'number' ? ev.data.sub_label_score : null;
+    if (typeof sub === 'string') {
+      const names = sub.split(',').map(s => s.trim()).filter(Boolean);
+      return names.map((name, idx) => ({
+        name,
+        score: names.length === 1 ? fallbackScore : null,
+      }));
+    }
     if (Array.isArray(sub)) {
-      if (typeof sub[0] === 'string' && typeof sub[1] === 'number') return [sub[0]];
-      return sub.flatMap(x => Array.isArray(x) ? (typeof x[0] === 'string' ? [x[0]] : []) : (typeof x === 'string' ? [x] : []));
+      if (typeof sub[0] === 'string' && typeof sub[1] === 'number') {
+        return [{ name: sub[0], score: sub[1] }];
+      }
+      return sub.flatMap(x => {
+        if (Array.isArray(x) && typeof x[0] === 'string') {
+          return [{ name: x[0], score: typeof x[1] === 'number' ? x[1] : null }];
+        }
+        if (typeof x === 'string') {
+          return [{ name: x, score: fallbackScore }];
+        }
+        return [];
+      });
     }
     return [];
+  }
+
+  formatLabelEntry(entry) {
+    const minConf = Number(this.config.label_confidence_threshold ?? 0.8);
+    const uncertain = minConf > 0 && entry.score !== null && entry.score < minConf;
+    return uncertain ? `${entry.name}?` : entry.name;
   }
 
   dedupeEvents(events) {
@@ -269,7 +294,8 @@ class FrigateCutoutsCard extends HTMLElement {
         const evZones = Array.isArray(ev.zones) ? ev.zones : [];
         if (!evZones.some(z => zoneFilter.includes(z))) continue;
       }
-      const labels = this.parseLabels(ev.sub_label);
+      const labelEntries = this.parseLabelEntries(ev);
+      const labels = labelEntries.map(e => e.name);
       const ts = ev.start_time || 0;
 
       if (windowSec > 0) {
@@ -278,16 +304,16 @@ class FrigateCutoutsCard extends HTMLElement {
           if (kept.some(k => k.key === key && Math.abs(k.ts - ts) < windowSec)) continue;
           const anonIdx = kept.findIndex(k => k.labels.length === 0 && k.cam === cam && Math.abs(k.ts - ts) < windowSec);
           if (anonIdx !== -1) {
-            kept[anonIdx] = { ev, labels, ts, cam, key };
+            kept[anonIdx] = { ev, labels, labelEntries, ts, cam, key };
             continue;
           }
-          kept.push({ ev, labels, ts, cam, key });
+          kept.push({ ev, labels, labelEntries, ts, cam, key });
         } else {
           if (kept.some(k => k.cam === cam && Math.abs(k.ts - ts) < windowSec)) continue;
-          kept.push({ ev, labels, ts, cam, key: '' });
+          kept.push({ ev, labels, labelEntries, ts, cam, key: '' });
         }
       } else {
-        kept.push({ ev, labels, ts, cam, key: labels.join('+') });
+        kept.push({ ev, labels, labelEntries, ts, cam, key: labels.join('+') });
       }
       if (kept.length >= limit) break;
     }
@@ -524,22 +550,26 @@ class FrigateCutoutsCard extends HTMLElement {
       const cacheSuffix = `v4:${this.config.threshold}:${this.config.outline_px}:${this.config.target_luminance}:${this.config.contrast}:${outlineColor}`;
       row.innerHTML = '';
 
-      for (const { ev, labels } of deduped) {
+      for (const { ev, labelEntries } of deduped) {
         const tm = new Date(ev.start_time * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-        const pillsHtml = labels.length
-          ? labels.map(n => `<span class="pill">${n}</span>`).join('')
+        const displayLabels = labelEntries.map(e => this.formatLabelEntry(e));
+        const pillsHtml = labelEntries.length
+          ? labelEntries.map((e, i) => {
+              const titleAttr = e.score !== null ? ` title="Confidence: ${Math.round(e.score * 100)}%"` : '';
+              return `<span class="pill"${titleAttr}>${displayLabels[i]}</span>`;
+            }).join('')
           : `<span class="pill unknown">${this.config.unknown_label || 'Visitor'}</span>`;
 
         const btn = document.createElement('button');
         btn.className = 'item';
         btn.innerHTML = `
-          <div class="img-box"><img alt="${labels.join(', ') || 'Person'}" /></div>
+          <div class="img-box"><img alt="${displayLabels.join(', ') || 'Person'}" /></div>
           <div class="tag-stack">
             <div class="pills">${pillsHtml}</div>
             <span class="time-chip">${tm}</span>
           </div>
         `;
-        btn.onclick = () => this.openFullSnapshot(ev, labels, tm);
+        btn.onclick = () => this.openFullSnapshot(ev, displayLabels, tm);
         row.appendChild(btn);
 
         const imgEl = btn.querySelector('img');
@@ -635,6 +665,11 @@ class FrigateCutoutsCardEditor extends HTMLElement {
           <label>Unrecognized Label
             <input type="text" data-key="unknown_label" value="${c.unknown_label}" />
           </label>
+          <label>Label Confidence Threshold (0 = off)
+            <input type="number" data-key="label_confidence_threshold" min="0" max="1" step="0.05" value="${c.label_confidence_threshold}" />
+          </label>
+        </div>
+        <div class="row">
           <label class="chk">
             <input type="checkbox" data-key="tilt" ${c.tilt ? 'checked' : ''} />
             Playful sticker tilt

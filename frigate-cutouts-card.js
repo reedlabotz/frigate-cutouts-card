@@ -129,27 +129,27 @@ class FrigateCutoutsCard extends HTMLElement {
           font-weight: 700;
           padding: 3px 10px;
           border-radius: 999px;
-          background: #4C6330;
-          color: #FFFFFF;
-          border: 2px solid #FFFFFF;
+          background: var(--success-color, #4C6330);
+          color: var(--text-primary-color, #FFFFFF);
+          border: 2px solid var(--ha-card-background, var(--card-background-color, #FFFFFF));
           box-shadow: 0 2px 6px rgba(38,38,31,0.16);
           max-width: 96px;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        .pill.unknown { background: #EFECE2; color: #5E5B50; font-weight: 600; }
+        .pill.unknown { background: var(--secondary-background-color, #EFECE2); color: var(--secondary-text-color, #5E5B50); font-weight: 600; }
         .time-chip {
           font-size: 11px;
           font-weight: 600;
-          color: #5E5B50;
-          background: #FFFFFF;
+          color: var(--secondary-text-color, #5E5B50);
+          background: var(--ha-card-background, var(--card-background-color, #FFFFFF));
           padding: 1px 7px;
           border-radius: 999px;
           box-shadow: 0 1px 3px rgba(38,38,31,0.10);
           font-variant-numeric: tabular-nums;
         }
-        .status { font-size: 13px; color: #5E5B50; padding: 10px 4px; }
+        .status { font-size: 13px; color: var(--secondary-text-color, #5E5B50); padding: 10px 4px; }
         .modal-backdrop {
           position: fixed;
           inset: 0;
@@ -163,7 +163,7 @@ class FrigateCutoutsCard extends HTMLElement {
         }
         .modal-backdrop.open { display: flex; }
         .modal-card {
-          background: #F6F4EE;
+          background: var(--primary-background-color, #F6F4EE);
           border-radius: 24px;
           padding: 16px;
           max-width: 420px;
@@ -177,24 +177,24 @@ class FrigateCutoutsCard extends HTMLElement {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          color: #26261F;
+          color: var(--primary-text-color, #26261F);
           font-size: 15px;
           font-weight: 600;
         }
         .modal-close {
-          background: #EFECE2;
+          background: var(--secondary-background-color, #EFECE2);
           border: none;
           border-radius: 999px;
           padding: 6px 12px;
           font-size: 13px;
           font-weight: 600;
-          color: #26261F;
+          color: var(--primary-text-color, #26261F);
           cursor: pointer;
         }
         .modal-img {
           width: 100%;
           border-radius: 16px;
-          background: #FFFFFF;
+          background: var(--ha-card-background, var(--card-background-color, #FFFFFF));
           object-fit: cover;
         }
       </style>

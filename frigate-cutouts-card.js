@@ -50,12 +50,25 @@ class FrigateCutoutsCard extends HTMLElement {
     }
   }
 
+  getStickerOutlineColor() {
+    if (!this._hass?.themes?.darkMode) return '#FFFFFF';
+    const style = getComputedStyle(this);
+    const cardBg = style.getPropertyValue('--ha-card-background').trim()
+      || style.getPropertyValue('--card-background-color').trim();
+    return cardBg || '#242426';
+  }
+
   set hass(hass) {
     this._hass = hass;
+    const themeKey = `${Boolean(hass?.themes?.darkMode)}:${hass?.themes?.theme || ''}`;
     if (!this._initialized) {
       this._initialized = true;
+      this._themeKey = themeKey;
       this.attachShadow({ mode: 'open' });
       this.renderShell();
+      this.loadEvents(true);
+    } else if (themeKey !== this._themeKey) {
+      this._themeKey = themeKey;
       this.loadEvents(true);
     } else if (Date.now() - (this._lastFetch || 0) > 60000) {
       this.loadEvents(false);
@@ -304,7 +317,7 @@ class FrigateCutoutsCard extends HTMLElement {
     return Math.min(1.55, Math.max(1.05, targetLum / meanLum));
   }
 
-  async makeSticker(blob, segmenter) {
+  async makeSticker(blob, segmenter, outlineColor = '#FFFFFF') {
     const threshold = Number(this.config.threshold) || 0.55;
     const outlinePx = Number(this.config.outline_px) ?? 12;
     const targetLum = Number(this.config.target_luminance) ?? 145;
@@ -369,7 +382,7 @@ class FrigateCutoutsCard extends HTMLElement {
       fb.width = w + b * 2;
       fb.height = h + b * 2;
       const fctx = fb.getContext('2d');
-      fctx.fillStyle = '#FFFFFF';
+      fctx.fillStyle = outlineColor;
       fctx.beginPath();
       fctx.roundRect(0, 0, fb.width, fb.height, 20);
       fctx.fill();
@@ -404,7 +417,7 @@ class FrigateCutoutsCard extends HTMLElement {
       const silCtx = sil.getContext('2d');
       silCtx.drawImage(person, 0, 0);
       silCtx.globalCompositeOperation = 'source-in';
-      silCtx.fillStyle = '#FFFFFF';
+      silCtx.fillStyle = outlineColor;
       silCtx.fillRect(0, 0, w, h);
 
       for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
@@ -490,7 +503,8 @@ class FrigateCutoutsCard extends HTMLElement {
       let segmenter = null;
       try { segmenter = await getSharedSegmenter(); } catch (_) {}
 
-      const cacheSuffix = `v4:${this.config.threshold}:${this.config.outline_px}:${this.config.target_luminance}:${this.config.contrast}`;
+      const outlineColor = this.getStickerOutlineColor();
+      const cacheSuffix = `v4:${this.config.threshold}:${this.config.outline_px}:${this.config.target_luminance}:${this.config.contrast}:${outlineColor}`;
       row.innerHTML = '';
 
       for (const { ev, labels } of deduped) {
@@ -519,7 +533,7 @@ class FrigateCutoutsCard extends HTMLElement {
             const resp = await this._hass.fetchWithAuth(`/api/frigate/notifications/${ev.id}/snapshot.jpg?crop=1&bbox=0`);
             const blob = await resp.blob();
             if (segmenter) {
-              src = await this.makeSticker(blob, segmenter);
+              src = await this.makeSticker(blob, segmenter, outlineColor);
               if (db) this.setCached(db, cacheKey, src);
             } else {
               src = URL.createObjectURL(blob);

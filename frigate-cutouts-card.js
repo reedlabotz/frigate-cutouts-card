@@ -76,12 +76,12 @@ class FrigateCutoutsCard extends HTMLElement {
           display: flex;
           gap: 6px;
           overflow-x: auto;
-          padding: 12px 12px 10px;
+          padding: 12px 6px 10px;
           scrollbar-width: none;
         }
         .row::-webkit-scrollbar { display: none; }
         .item {
-          flex: 0 0 98px;
+          flex: 0 0 auto;
           background: transparent;
           border: none;
           padding: 0;
@@ -95,7 +95,7 @@ class FrigateCutoutsCard extends HTMLElement {
         }
         ${tiltCss}
         .img-box {
-          width: 96px;
+          min-width: 96px;
           height: 130px;
           display: flex;
           align-items: flex-end;
@@ -103,7 +103,7 @@ class FrigateCutoutsCard extends HTMLElement {
           overflow: visible;
         }
         .img-box img {
-          max-width: 118px;
+          max-width: 130px;
           max-height: 100%;
           width: auto;
           height: auto;

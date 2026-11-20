@@ -69,6 +69,7 @@ class FrigateCutoutsCard extends HTMLElement {
       this.loadEvents(true);
     } else if (themeKey !== this._themeKey) {
       this._themeKey = themeKey;
+      this.renderShell();
       this.loadEvents(true);
     } else if (Date.now() - (this._lastFetch || 0) > 60000) {
       this.loadEvents(false);
@@ -76,6 +77,12 @@ class FrigateCutoutsCard extends HTMLElement {
   }
 
   renderShell() {
+    const isDark = Boolean(this._hass?.themes?.darkMode);
+    const imgShadow = isDark
+      ? 'drop-shadow(0 0 1px rgba(255,255,255,0.18)) drop-shadow(0 6px 14px rgba(0,0,0,0.65)) drop-shadow(0 2px 4px rgba(0,0,0,0.45))'
+      : 'drop-shadow(0 5px 10px rgba(38,38,31,0.22)) drop-shadow(0 1px 2px rgba(38,38,31,0.12))';
+    const pillShadow = isDark ? '0 3px 8px rgba(0,0,0,0.55)' : '0 2px 6px rgba(38,38,31,0.16)';
+    const chipShadow = isDark ? '0 2px 6px rgba(0,0,0,0.45)' : '0 1px 3px rgba(38,38,31,0.10)';
     const tiltCss = this.config.tilt
       ? `.item:nth-child(odd) { transform: rotate(-1.5deg); }
          .item:nth-child(even) { transform: rotate(1.5deg); }
@@ -121,7 +128,7 @@ class FrigateCutoutsCard extends HTMLElement {
           width: auto;
           height: auto;
           object-fit: contain;
-          filter: drop-shadow(0 5px 10px rgba(38,38,31,0.22)) drop-shadow(0 1px 2px rgba(38,38,31,0.12));
+          filter: ${imgShadow};
         }
         .tag-stack {
           margin-top: -10px;
@@ -145,7 +152,7 @@ class FrigateCutoutsCard extends HTMLElement {
           background: var(--success-color, #4C6330);
           color: var(--text-primary-color, #FFFFFF);
           border: 2px solid var(--ha-card-background, var(--card-background-color, #FFFFFF));
-          box-shadow: 0 2px 6px rgba(38,38,31,0.16);
+          box-shadow: ${pillShadow};
           max-width: 96px;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -159,7 +166,7 @@ class FrigateCutoutsCard extends HTMLElement {
           background: var(--ha-card-background, var(--card-background-color, #FFFFFF));
           padding: 1px 7px;
           border-radius: 999px;
-          box-shadow: 0 1px 3px rgba(38,38,31,0.10);
+          box-shadow: ${chipShadow};
           font-variant-numeric: tabular-nums;
         }
         .status { font-size: 13px; color: var(--secondary-text-color, #5E5B50); padding: 10px 4px; }

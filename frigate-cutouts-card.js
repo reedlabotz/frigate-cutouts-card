@@ -91,13 +91,23 @@ class FrigateCutoutsCard extends HTMLElement {
 
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display: block; font-family: inherit; }
+        :host { display: block; width: 100%; font-family: inherit; }
         .row {
           display: flex;
           gap: 6px;
           overflow-x: auto;
           padding: 12px 6px 10px;
           scrollbar-width: none;
+          box-sizing: border-box;
+        }
+        @media (max-width: 767px) {
+          .row {
+            width: 100vw;
+            max-width: 100vw;
+            margin-left: calc(50% - 50vw);
+            padding: 12px 18px 10px;
+            scroll-padding-left: 18px;
+          }
         }
         .row::-webkit-scrollbar { display: none; }
         .item {

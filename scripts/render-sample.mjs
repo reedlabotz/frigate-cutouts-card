@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const OUT_PATH = path.join(ROOT, 'docs', 'sample.png');
+const TIMELINE_OUT_PATH = path.join(ROOT, 'docs', 'sample-timeline.png');
 
 const now = Math.floor(Date.now() / 1000);
 const SAMPLE_EVENTS = [
@@ -63,6 +64,24 @@ const SAMPLE_EVENTS = [
   },
 ];
 
+const TIMELINE_SAMPLE_EVENTS = [
+  SAMPLE_EVENTS[0],
+  SAMPLE_EVENTS[1],
+  SAMPLE_EVENTS[2],
+  {
+    ...SAMPLE_EVENTS[3],
+    camera: 'driveway',
+    zones: ['driveway'],
+    start_time: now - 86400 - 1200,
+    end_time: now - 86400 - 1175,
+  },
+  {
+    ...SAMPLE_EVENTS[4],
+    start_time: now - 2 * 86400 - 3600,
+    end_time: now - 2 * 86400 - 3585,
+  },
+];
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
@@ -70,7 +89,15 @@ const MIME = {
   '.png': 'image/png',
 };
 
-function buildHarnessHtml() {
+function buildHarnessHtml({ isTimeline = false } = {}) {
+  const events = isTimeline ? TIMELINE_SAMPLE_EVENTS : SAMPLE_EVENTS;
+  const tag = isTimeline ? 'frigate-cutouts-timeline-card' : 'frigate-cutouts-card';
+  const frameWidth = isTimeline ? 440 : 640;
+  const imgSelector = isTimeline ? '.tl-item img' : '.item img';
+  const cardConfig = isTimeline
+    ? { group_mode: 'grouped', limit: 50, label_confidence_threshold: 0.8 }
+    : { group_mode: 'grouped', limit: 10, tilt: true, label_confidence_threshold: 0.8 };
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -85,6 +112,7 @@ function buildHarnessHtml() {
       --secondary-text-color: #5E5B50;
       --text-primary-color: #FFFFFF;
       --success-color: #4C6330;
+      --divider-color: rgba(38, 38, 31, 0.14);
     }
     * { box-sizing: border-box; }
     body {
@@ -99,17 +127,17 @@ function buildHarnessHtml() {
       border-radius: 20px;
       padding: 12px 14px;
       box-shadow: 0 4px 18px rgba(38, 38, 31, 0.08);
-      width: 640px;
+      width: ${frameWidth}px;
     }
   </style>
   <script src="/frigate-cutouts-card.js"></script>
 </head>
 <body>
   <div class="card-frame" id="frame">
-    <frigate-cutouts-card id="card"></frigate-cutouts-card>
+    <${tag} id="card"></${tag}>
   </div>
   <script>
-    const EVENTS = ${JSON.stringify(SAMPLE_EVENTS)};
+    const EVENTS = ${JSON.stringify(events)};
 
     async function cropImageBlob(url, box, crop) {
       const resp = await fetch(url);
@@ -129,12 +157,7 @@ function buildHarnessHtml() {
     }
 
     const card = document.getElementById('card');
-    card.setConfig({
-      group_mode: 'grouped',
-      limit: 10,
-      tilt: true,
-      label_confidence_threshold: 0.8,
-    });
+    card.setConfig(${JSON.stringify(cardConfig)});
     card.hass = {
       themes: { darkMode: false, theme: 'default' },
       callWS: async () => EVENTS,
@@ -151,7 +174,7 @@ function buildHarnessHtml() {
     window.__cardReady = async () => {
       const start = Date.now();
       while (Date.now() - start < 30000) {
-        const imgs = card.shadowRoot ? Array.from(card.shadowRoot.querySelectorAll('.item img')) : [];
+        const imgs = card.shadowRoot ? Array.from(card.shadowRoot.querySelectorAll('${imgSelector}')) : [];
         if (imgs.length === 4 && imgs.every(img => img.complete && img.naturalWidth > 0)) {
           await new Promise(r => setTimeout(r, 150));
           const rect = document.getElementById('frame').getBoundingClientRect();
@@ -172,7 +195,12 @@ function startServer() {
       const urlPath = (req.url || '/').split('?')[0];
       if (urlPath === '/harness.html') {
         res.writeHead(200, { 'Content-Type': MIME['.html'] });
-        res.end(buildHarnessHtml());
+        res.end(buildHarnessHtml({ isTimeline: false }));
+        return;
+      }
+      if (urlPath === '/timeline-harness.html') {
+        res.writeHead(200, { 'Content-Type': MIME['.html'] });
+        res.end(buildHarnessHtml({ isTimeline: true }));
         return;
       }
       const filePath = path.resolve(ROOT, '.' + urlPath);
@@ -261,7 +289,6 @@ async function main() {
       ws.send(JSON.stringify({ id, method, params }));
     });
 
-    await cdp('Emulation.setDeviceMetricsOverride', { width: 800, height: 420, deviceScaleFactor: 2, mobile: false });
     await cdp('Runtime.enable');
     ws.addEventListener('message', (ev) => {
       const msg = JSON.parse(ev.data);
@@ -273,31 +300,38 @@ async function main() {
       }
     });
     await cdp('Page.enable');
-    const loaded = new Promise(resolve => {
-      const onMsg = (ev) => {
-        if (JSON.parse(ev.data).method === 'Page.loadEventFired') {
-          ws.removeEventListener('message', onMsg);
-          resolve();
-        }
-      };
-      ws.addEventListener('message', onMsg);
-    });
-    await cdp('Page.navigate', { url: `http://127.0.0.1:${port}/harness.html` });
-    await loaded;
 
-    const evalRes = await cdp('Runtime.evaluate', {
-      expression: 'window.__cardReady()',
-      awaitPromise: true,
-      returnByValue: true,
-    });
-    if (evalRes.exceptionDetails) throw new Error(JSON.stringify(evalRes.exceptionDetails));
-    const clip = evalRes.result.value;
-    const shot = await cdp('Page.captureScreenshot', {
-      format: 'png',
-      clip: { x: clip.x, y: clip.y, width: clip.width, height: clip.height, scale: 1 },
-    });
-    await fs.writeFile(OUT_PATH, Buffer.from(shot.data, 'base64'));
-    console.log(`Rendered ${OUT_PATH}`);
+    const renderTarget = async (urlPath, outPath, width, height) => {
+      await cdp('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 2, mobile: false });
+      const loaded = new Promise(resolve => {
+        const onMsg = (ev) => {
+          if (JSON.parse(ev.data).method === 'Page.loadEventFired') {
+            ws.removeEventListener('message', onMsg);
+            resolve();
+          }
+        };
+        ws.addEventListener('message', onMsg);
+      });
+      await cdp('Page.navigate', { url: `http://127.0.0.1:${port}${urlPath}` });
+      await loaded;
+
+      const evalRes = await cdp('Runtime.evaluate', {
+        expression: 'window.__cardReady()',
+        awaitPromise: true,
+        returnByValue: true,
+      });
+      if (evalRes.exceptionDetails) throw new Error(JSON.stringify(evalRes.exceptionDetails));
+      const clip = evalRes.result.value;
+      const shot = await cdp('Page.captureScreenshot', {
+        format: 'png',
+        clip: { x: clip.x, y: clip.y, width: clip.width, height: clip.height, scale: 1 },
+      });
+      await fs.writeFile(outPath, Buffer.from(shot.data, 'base64'));
+      console.log(`Rendered ${outPath}`);
+    };
+
+    await renderTarget('/harness.html', OUT_PATH, 800, 420);
+    await renderTarget('/timeline-harness.html', TIMELINE_OUT_PATH, 520, 800);
     ws.close();
   } finally {
     chrome.kill('SIGKILL');
